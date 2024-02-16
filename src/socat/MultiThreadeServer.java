@@ -7,24 +7,23 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MultiThreadeServer {
-    static List<BufferedWriter> clientWriter = new ArrayList<>();
+
     public static void main(String[] args) {
         runServer();
     }
 
     public static void runServer(){
 
-        try{
-            //서버 열고 (서버 소켓 생성)
-            ServerSocket serverSocket = new ServerSocket(5000);
+        try(ServerSocket serverSocket = new ServerSocket(5000);){
+
+            System.out.println("-----------Server Open----------");
 
             //클라이언트 연결들어오면 스레드 생성
             while(true){
                 //연결 들어오면 소켓 생성
                 Socket connection = serverSocket.accept();
+                System.out.println("Session ON");
 
-                BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()));
-                clientWriter.add(writer);
                 Thread clientThread = new Thread(new ClientHandler(connection));
                 clientThread.start();
             }
@@ -35,38 +34,62 @@ public class MultiThreadeServer {
 
 
     static class ClientHandler implements Runnable {
-        private Socket connection;
-        private BufferedWriter cl;
+        static List<BufferedWriter> clientWriter = new ArrayList<>();
+        private final Socket connection;
+        private BufferedReader input;
+        private BufferedWriter output;
+
         public ClientHandler(Socket connection){
+
             this.connection = connection;
+            try{
+                input = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+                output = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()));
+
+                clientWriter.add(output);
+            }catch (IOException e){
+                e.toString();
+            }
+
         }
 
         @Override
         public void run() {
-            try(
-                    BufferedReader input = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                    BufferedWriter output = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream()))
-            ){
+            try{
 
                 String clientMessage;
 
+                String name = input.readLine();
+                System.out.println(name + " 입장 ");
+                output.write(name+" 님 환영합니다");
+                output.newLine();
+                output.flush();
                 while((clientMessage = input.readLine()) != null){
-                    System.out.println("클라이언트 : "+clientMessage);
-                    System.out.println(clientWriter.size());
-                for(BufferedWriter cl : clientWriter){
-                    cl.write(clientMessage);
-                    cl.newLine();
-                    cl.flush();
-                }
+
+                    if(clientMessage.equals("exit")){
+                        break;
+
+                    }
+
+                    for(BufferedWriter cl : clientWriter){
+                            cl.write(name+">>"+clientMessage);
+                            cl.newLine();
+                            cl.flush();
+                    }
 
                 }
-
-                System.out.print("세션종료");
 
             }catch (IOException e){
                 System.out.println(e.toString());
             }finally{
-                clientWriter.remove(cl);
+                try {
+                    connection.close();
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println("remove");
+                clientWriter.remove(output);
+                System.out.println(clientWriter.size());
             }
         }
     }
